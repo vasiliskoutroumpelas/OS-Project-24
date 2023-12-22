@@ -73,7 +73,7 @@ while true; do
             # Print old value
             awk -F, -v business_code="$business_code" -v fieldNumber="$fieldNumber" '$1==business_code {print "Παλαιά τιμή:", $fieldNumber}' "$file"
                         
-            # Αν το προσωρινό αρχείο δεν υπάρχει τότε δημιουργείτα
+            # Αν το προσωρινό αρχείο δεν υπάρχει τότε δημιουργείται
             if [ ! -f ".temp" ]; then
                 cp "$file" ".temp"
                 
