@@ -26,7 +26,6 @@ inline double f(double x) {
 }
 
 int main(int argc, char *argv[]) {
-	sem_close(sem);
   unsigned long n = 4;  // Number of cores available in the testing machine
   
   if (argc == 2) {
