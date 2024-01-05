@@ -1,7 +1,7 @@
-# ./scheduler FCFS homogeneous.txt
+./scheduler FCFS homogeneous.txt
 # ./scheduler RR 1000 homogeneous.txt
 
-# ./scheduler FCFS reverse.txt
+./scheduler FCFS reverse.txt
 # ./scheduler RR 1000 reverse.txt
 
 # ./scheduler_io FCFS mixed.txt
