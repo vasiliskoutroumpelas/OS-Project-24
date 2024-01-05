@@ -100,7 +100,7 @@ int main(int argc,char **argv)
 
 	char *policy = argv[1];
 	int quantum = 1000; // Προεπιλεγμένο κβάντο δρομολόγησης
-	FILE* file = fopen("reverse.txt", "r"); 
+	FILE* file; 
 
 	if (argc == 4 && strcmp(policy, "RR")==0)
 	{
@@ -113,7 +113,7 @@ int main(int argc,char **argv)
 		file = fopen(argv[2], "r");
 		printf("Policy: %s\nDefault Quantum: %d\n", policy, quantum);
 	}
-	else if (argc == 3 && strcmp(policy, "FIFO")==0)
+	else if (argc == 3 && strcmp(policy, "FCFS")==0)
 	{
 		quantum = __INT_MAX__;
 		file = fopen(argv[2], "r");
