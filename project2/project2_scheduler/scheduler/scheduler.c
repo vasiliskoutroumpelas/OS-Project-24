@@ -1,3 +1,8 @@
+/*
+Vasileios Koutroumpelas, 1093397
+Filippos Minopetros, 1093431
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <signal.h>
 
 typedef struct node {
     char* name;
@@ -73,7 +79,7 @@ Process* pop_first(Process** head)
 	return temp;
 }
 
-void printList(Process* list) {
+void print_list(Process* list) {
     Process* current = list;
 
     while (current != NULL) {
@@ -84,14 +90,49 @@ void printList(Process* list) {
 	free(current);
 }
 
-void printProcess(Process* process) {
-	printf("Name: %s, PID: %d, State: %s, Entry: %ld\n",
-			process->name, process->pid, process->state, (long)process->entry);
+void print_process(Process* process) {
+	printf("Name: %s, PID: %d, State: %s\n",
+			process->name, process->pid, process->state);
+}
+
+void print_time_since_entry(Process* process) {
+	printf("Time since entry: %ld\n", process->entry);
+}
+
+void update_state(Process* process, const char* state) {
+    strcpy(process->state, state);
+}
+
+void start_process(Process* process) 
+{
+	pid_t pid = fork();
+	if (pid == 0)
+	{
+		// printf("%s\n", process->name);
+		execl(process->name, process->name, NULL);
+		perror("execl fail");
+	}
+	else
+	{
+		process->pid = pid;
+	}
 }
 
 
+int child_finished;
+void handle_child_finish(int sigid) {
+	child_finished = 1;
+}
+
+void sleep_milliseconds(unsigned int milliseconds) {
+    struct timespec ts;
+    ts.tv_sec = milliseconds / 1000;
+    ts.tv_nsec = (milliseconds % 1000) * 1000000;
+    nanosleep(&ts, NULL);
+}
+
 int main(int argc,char **argv)
-{
+{	
 	if (argc < 3 || argc > 4)
 	{
         printf("Usage: %s <policy> [<quantum>] <input_filename>\n", argv[0]);
@@ -99,7 +140,8 @@ int main(int argc,char **argv)
     }
 
 	char *policy = argv[1];
-	int quantum = 1000; // Προεπιλεγμένο κβάντο δρομολόγησης
+	int quantum = 1000; 
+
 	FILE* file; 
 
 	if (argc == 4 && strcmp(policy, "RR")==0)
@@ -115,7 +157,7 @@ int main(int argc,char **argv)
 	}
 	else if (argc == 3 && strcmp(policy, "FCFS")==0)
 	{
-		quantum = __INT_MAX__;
+		quantum=2147483647; //max int
 		file = fopen(argv[2], "r");
 		printf("Policy: %s\n", policy);
 	}
@@ -139,38 +181,58 @@ int main(int argc,char **argv)
 	}
 	
 	fclose(file);
-	printList(list);
-	pid_t pid;
+	// print_list(list);
+
+	struct sigaction sact;
+	sact.sa_handler = handle_child_finish;
+	sact.sa_flags = SA_NOCLDSTOP;
 	
+	
+	if (sigaction (SIGCHLD, &sact, NULL) < 0)
+		perror("could not set action for SIGINT\n");
+	
+
+
 	time_t start = time(NULL);
 	while (list != NULL)
 	{
 		Process* process = pop_first(&list);
-		strcpy(process->state, "RUNNING");
-		pid = fork();
-		if (pid == 0)
+		
+		if (strcmp(process->state, "NEW")==0)
 		{
-			// printf("%s\n", process->name);
-			execl(process->name, process->name, NULL);
-			perror("execl fail");
+			start_process(process);
+			update_state(process, "RUNNING");
+			printf("\n");
+			print_process(process);
 		}
 		else
 		{
-			process->pid = pid;
-			printf("\n");
-			printProcess(process);
-			waitpid(pid, NULL, 0);
-			time_t end = time(NULL);
-			process->entry = end - process->entry;
-			strcpy(process->state, "EXITED");
-			printf("Time from entry until exit: %ld sec\n", process->entry);
-			printProcess(process);
-			free(process);
+			kill(process->pid, SIGCONT);
+			update_state(process, "RUNNING");
+			print_process(process);
+		}
+		
+		sleep_milliseconds(quantum);
+		
+		if(child_finished)
+		{
+			update_state(process, "EXITED");
+			process->entry = time(NULL)-start;
+			print_process(process);
+			print_time_since_entry(process);
+			child_finished = 0;
+		}
+		else
+		{
+			kill(process->pid, SIGSTOP);
+			update_state(process, "STOPPED");
+			print_process(process);
+			
+			insert_end(&list, process->name, process->pid, "STOPPED", process->entry);
 		}
 	}
 	time_t end = time(NULL);
 	printf("\nTotal time was %ld sec\n", end-start);
 	free(list);
-
 	return 0;
 }
