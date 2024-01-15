@@ -1,0 +1,64 @@
+// variables and semaphores
+int portions=0;
+int beans=0;
+int carrots=0;
+
+sem_t customer = sem_open(1);
+sem_t full = sem_open(0);
+sem_t empty = sem_open(0);
+sem_t helper = sem_open(0);
+sem_t beans = sem_open(0);
+sem_t carrots = sem_open(0);
+
+// customer process
+while (1)
+{   
+    sem_post(empty);
+    sem_wait(full);
+    while (portions>0)
+    {
+        sem_wait(customer);
+        take_food();
+        portions--;
+        sem_post(customer);
+    }
+}
+
+// cook process
+while (1)
+{
+    sem_wait(empty);
+    sem_post(helper);
+    sem_wait(beans);
+    sem_wait(carrots);
+    cook();
+    portions = 9;
+    sem_post(full);
+}
+
+// helper1 process
+while (1)
+{
+    sem_wait(helper);
+    while (beans<=6)
+    {
+        helper();
+        beans+=3
+    }
+    sem_post(beans);
+}
+
+// helper2 process
+while (1)
+{
+    sem_wait(helper);
+    while (carrots<=3)
+    {
+        helper();
+        beans+=3
+    }
+    sem_post(carrots);
+}
+
+
+
