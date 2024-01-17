@@ -11,6 +11,8 @@ Filippos Minopetros, 1093431
 #include <sys/wait.h>
 #include <unistd.h>
 #include <signal.h>
+#include <semaphore.h>
+#include <fcntl.h>
 
 // structure that describes a process
 typedef struct node {
@@ -115,9 +117,14 @@ void start_process(Process* process)
 		execl(process->name, process->name, NULL);
 		perror("execl fail");
 	}
-	else // parent process
+	else if(pid > 0)// parent process
 	{
 		process->pid = pid;
+	}
+	else
+	{
+		perror("fork");
+		exit(1);
 	}
 }
 
@@ -127,20 +134,24 @@ Process *list, *current_process;
 // global variable which acts as a flag for the status of a process in execution
 int child_finished=0;
 
-int io_in_progress=0;
+int io_start=0;
+int io_finish=0;
+int child_pid=0;
 
 void handle_child_finish(int sigid) {
 	child_finished = 1;
 }
 
-void handle_io_start(int sigid) {
+void handle_io_start(int sigid) { // SIGUSR1
 	printf("handle_io_start\n");
-	io_in_progress=1;
+	io_start=1;
+	printf("io_start=%d\n", io_start);
 }
 
-void handle_io_finish(int sigid) {
+void handle_io_finish(int sigid) { // SIGUSR2
 	printf("handle_io_finish\n");
-	io_in_progress=0;
+	io_finish=1;
+	printf("io_finish=%d\n", io_finish);
 }
 
 // helper function that converts milliseconds to seconds and nanoseconds to be used by nanosleep
@@ -214,7 +225,7 @@ int main(int argc,char **argv)
 	sact_io_finish.sa_flags = 0;
 	
 	if (sigaction (SIGCHLD, &sact, NULL) < 0)
-		perror("could not set action for SIGINT\n");
+		perror("could not set action for SIGCHLD\n");
 	if (sigaction (SIGUSR1, &sact_io_start, NULL) < 0)
 		perror("could not set action for SIGUSR1\n");
 	if (sigaction (SIGUSR2, &sact_io_finish, NULL) < 0)
@@ -233,6 +244,27 @@ int main(int argc,char **argv)
 			printf("\n");
 			print_process(current_process);
 		}
+		else if (strcmp(current_process->state, "IO")==0)
+		{
+			printf("io_finish: %d\n", io_finish);
+			if (!io_finish)
+			{
+				
+				insert_end(&list, current_process->name, current_process->pid, "IO", current_process->entry);	
+
+				continue;
+			}
+			else
+			{
+				print_process(current_process);
+
+				kill(current_process->pid, SIGCONT);
+				update_state(current_process, "RUNNING");
+				print_process(current_process);
+				io_finish=0;
+			}
+			
+		}
 		else
 		{
 			kill(current_process->pid, SIGCONT);
@@ -241,6 +273,25 @@ int main(int argc,char **argv)
 		}
 		
 		sleep_milliseconds(quantum);
+
+		if (io_start)
+		{
+			print_process(current_process);
+			io_start=0;
+			pid_t pid = fork();
+			if(pid==0)
+			{
+			}
+			if(pid>0)
+			{
+				update_state(current_process, "IO");
+			}
+			if(pid<0)
+			{
+				perror("fork in io");
+				return 1;
+			}
+		}
 		
 		if(child_finished)
 		{
@@ -249,6 +300,14 @@ int main(int argc,char **argv)
 			print_process(current_process);
 			print_time_since_entry(current_process);
 			child_finished = 0;
+		}
+		else if(strcmp(current_process->state, "IO")==0)
+		{
+			kill(current_process->pid, SIGSTOP);
+			update_state(current_process, "IO");
+			print_process(current_process);
+			
+			insert_end(&list, current_process->name, current_process->pid, "IO", current_process->entry);
 		}
 		else
 		{
