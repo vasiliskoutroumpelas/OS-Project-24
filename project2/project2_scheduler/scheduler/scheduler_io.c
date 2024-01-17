@@ -10,9 +10,6 @@ Filippos Minopetros, 1093431
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <signal.h>
-#include <semaphore.h>
-#include <fcntl.h>
 
 // structure that describes a process
 typedef struct node {
@@ -87,7 +84,7 @@ void print_list(Process* list) {
     Process* current = list;
 
     while (current != NULL) {
-        printf("Name: %s, PID: %d, State: %s",
+        printf("Name: %s, PID: %d, State: %s\n",
                current->name, current->pid, current->state);
         current = current->next;
     }
@@ -96,7 +93,7 @@ void print_list(Process* list) {
 
 // display function, prints the details of a single process
 void print_process(Process* process) {
-	printf("Name: %s, PID: %d, State: %s\n",
+	printf("\nName: %s, PID: %d, State: %s\n",
 			process->name, process->pid, process->state);
 }
 
@@ -108,58 +105,19 @@ void update_state(Process* process, const char* state) {
     strcpy(process->state, state);
 }
 
-// function that starts a process via forking and executing the child process
-void start_process(Process* process) 
-{
-	pid_t pid = fork();
-	if (pid == 0) // child process
-	{
-		execl(process->name, process->name, NULL);
-		perror("execl fail");
-	}
-	else if(pid > 0)// parent process
-	{
-		process->pid = pid;
-	}
-	else
-	{
-		perror("fork");
-		exit(1);
-	}
-}
+// global variables which act as flags for the status of an IO execution
+int io_start=0;
+int io_finish=0;
 
 // global variables to be used by the scheduler
 Process *list, *current_process;
 
-// global variable which acts as a flag for the status of a process in execution
-int child_finished=0;
-
-int io_start=0;
-int io_finish=0;
-int child_pid=0;
-
-void handle_child_finish(int sigid) {
-	child_finished = 1;
-}
-
 void handle_io_start(int sigid) { // SIGUSR1
-	printf("handle_io_start\n");
 	io_start=1;
-	printf("io_start=%d\n", io_start);
 }
 
 void handle_io_finish(int sigid) { // SIGUSR2
-	printf("handle_io_finish\n");
 	io_finish=1;
-	printf("io_finish=%d\n", io_finish);
-}
-
-// helper function that converts milliseconds to seconds and nanoseconds to be used by nanosleep
-void sleep_milliseconds(unsigned int milliseconds) {
-    struct timespec ts;
-    ts.tv_sec = milliseconds / 1000;
-    ts.tv_nsec = (milliseconds % 1000) * 1000000;
-    nanosleep(&ts, NULL);
 }
 
 int main(int argc,char **argv)
@@ -173,23 +131,10 @@ int main(int argc,char **argv)
 
 	// variables
 	char *policy = argv[1];
-	int quantum = 1000; 
 	FILE* file; 
 
-	if (argc == 4 && strcmp(policy, "RR")==0)
+	if (argc == 3 && strcmp(policy, "FCFS")==0)
 	{
-		quantum = atoi(argv[2]);
-		file = fopen(argv[3], "r");
-		printf("Policy: %s\nQuantum: %d\n", policy, quantum);
-	}
-	else if (argc == 3 && strcmp(policy, "RR")==0)
-	{
-		file = fopen(argv[2], "r");
-		printf("Policy: %s\nDefault Quantum: %d\n", policy, quantum);
-	}
-	else if (argc == 3 && strcmp(policy, "FCFS")==0)
-	{
-		quantum=2147483647; //max int
 		file = fopen(argv[2], "r");
 		printf("Policy: %s\n", policy);
 	}
@@ -206,17 +151,14 @@ int main(int argc,char **argv)
 
 	// insert all processes from the file to the list
 	char name[100];
+	
 	while (fscanf(file, "%s\n", name) != EOF)
 	{
 		insert_end(&list, name, -1, "NEW", time(NULL));
 	}
 	
 	fclose(file);
-
-	// defining action
-	struct sigaction sact;
-	sact.sa_handler = handle_child_finish;
-	sact.sa_flags = SA_NOCLDSTOP;
+	pid_t pid;
 
 	struct sigaction sact_io_start, sact_io_finish;
     sact_io_start.sa_handler = handle_io_start;
@@ -224,8 +166,6 @@ int main(int argc,char **argv)
 	sact_io_start.sa_flags = 0;
 	sact_io_finish.sa_flags = 0;
 	
-	if (sigaction (SIGCHLD, &sact, NULL) < 0)
-		perror("could not set action for SIGCHLD\n");
 	if (sigaction (SIGUSR1, &sact_io_start, NULL) < 0)
 		perror("could not set action for SIGUSR1\n");
 	if (sigaction (SIGUSR2, &sact_io_finish, NULL) < 0)
@@ -233,93 +173,67 @@ int main(int argc,char **argv)
 
 	// start of scheduler
 	time_t start = time(NULL);
+	Process* process_io;
 	while (list != NULL)
 	{
 		current_process = pop_first(&list);
-		
-		if (strcmp(current_process->state, "NEW")==0)
+		if (list == NULL && strcmp(current_process->state, "WAITING IO")==0 && !io_finish)
 		{
-			start_process(current_process);
-			update_state(current_process, "RUNNING");
-			printf("\n");
-			print_process(current_process);
+			printf("\nNo other process to be scheduled. Waiting IO to be finished.\n");
+			while (!io_finish);
 		}
-		else if (strcmp(current_process->state, "IO")==0)
+		if (!io_finish || current_process->pid!=process_io->pid)
 		{
-			printf("io_finish: %d\n", io_finish);
-			if (!io_finish)
+			pid = fork();
+			if (pid == 0)
 			{
-				
-				insert_end(&list, current_process->name, current_process->pid, "IO", current_process->entry);	
-
-				continue;
+				// printf("%s\n", current_process->name);
+				execl(current_process->name, current_process->name, NULL);
+				perror("execl fail");
 			}
 			else
 			{
-				print_process(current_process);
-
-				kill(current_process->pid, SIGCONT);
 				update_state(current_process, "RUNNING");
+				current_process->pid = pid;
 				print_process(current_process);
-				io_finish=0;
+				waitpid(current_process->pid, NULL, 0);
+				if (io_start)
+				{
+					io_start=0;
+					process_io = current_process;
+					update_state(process_io, "WAITING IO");
+					print_process(process_io);
+					insert_end(&list, process_io->name, process_io->pid, "WAITING IO", process_io->entry);
+					continue;
+				}
+				else
+				{
+					waitpid(current_process->pid, NULL, 0);
+					time_t end = time(NULL);
+					current_process->entry = end - current_process->entry;
+					update_state(current_process, "EXITED");
+					print_process(current_process);
+					print_time_since_entry(current_process);
+				}
 			}
-			
 		}
 		else
 		{
-			kill(current_process->pid, SIGCONT);
-			update_state(current_process, "RUNNING");
-			print_process(current_process);
-		}
-		
-		sleep_milliseconds(quantum);
-
-		if (io_start)
-		{
-			print_process(current_process);
-			io_start=0;
-			pid_t pid = fork();
-			if(pid==0)
-			{
-			}
-			if(pid>0)
-			{
-				update_state(current_process, "IO");
-			}
-			if(pid<0)
-			{
-				perror("fork in io");
-				return 1;
-			}
-		}
-		
-		if(child_finished)
-		{
-			update_state(current_process, "EXITED");
-			current_process->entry = time(NULL)-start;
-			print_process(current_process);
-			print_time_since_entry(current_process);
-			child_finished = 0;
-		}
-		else if(strcmp(current_process->state, "IO")==0)
-		{
-			kill(current_process->pid, SIGSTOP);
-			update_state(current_process, "IO");
-			print_process(current_process);
-			
-			insert_end(&list, current_process->name, current_process->pid, "IO", current_process->entry);
-		}
-		else
-		{
-			kill(current_process->pid, SIGSTOP);
-			update_state(current_process, "STOPPED");
-			print_process(current_process);
-			
-			insert_end(&list, current_process->name, current_process->pid, "STOPPED", current_process->entry);
+			io_finish=0;
+			kill(process_io->pid, SIGCONT);
+			update_state(process_io, "RUNNING");
+			print_process(process_io);
+			waitpid(process_io->pid, NULL, 0);
+			time_t end = time(NULL);
+			process_io->entry = end - process_io->entry;
+			update_state(process_io, "EXITED");
+			print_process(process_io);
+			print_time_since_entry(process_io);
 		}
 	}
 	time_t end = time(NULL);
 	printf("\nTotal time was %ld sec\n", end-start);
 	free(list);
+
 	return 0;
 }
