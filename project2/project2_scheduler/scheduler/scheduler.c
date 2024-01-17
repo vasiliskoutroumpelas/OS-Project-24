@@ -94,7 +94,7 @@ void print_list(Process* list) {
 
 // display function, prints the details of a single process
 void print_process(Process* process) {
-	printf("Name: %s, PID: %d, State: %s\n",
+	printf("\nName: %s, PID: %d, State: %s\n",
 			process->name, process->pid, process->state);
 }
 
@@ -208,7 +208,6 @@ int main(int argc,char **argv)
 		{
 			start_process(current_process);
 			update_state(current_process, "RUNNING");
-			printf("\n");
 			print_process(current_process);
 		}
 		else
