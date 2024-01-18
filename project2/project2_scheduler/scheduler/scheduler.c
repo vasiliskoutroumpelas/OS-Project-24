@@ -18,7 +18,7 @@ typedef struct node {
     char* name;
 	pid_t pid;
 	char* state;
-	double entry;
+	double finish_time;
     struct node* next;
     struct node* prev;
 }Process;
@@ -105,7 +105,7 @@ void print_process(Process* process) {
 }
 
 void print_time_since_entry(Process* process) {
-	printf("Time since entry: %.2lf\n", process->entry);
+	printf("Time since entry: %.2lf\n", process->finish_time);
 }
 
 void update_state(Process* process, const char* state) {
@@ -228,7 +228,7 @@ int main(int argc,char **argv)
 		if(child_finished)
 		{
 			update_state(current_process, "EXITED");
-			current_process->entry = get_wtime()-start;
+			current_process->finish_time = get_wtime()-start;
 			print_process(current_process);
 			print_time_since_entry(current_process);
 			child_finished = 0;

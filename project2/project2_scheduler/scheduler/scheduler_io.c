@@ -17,7 +17,7 @@ typedef struct node {
     char* name;
 	pid_t pid;
 	char* state;
-	double entry;
+	double finish_time;
     struct node* next;
     struct node* prev;
 }Process;
@@ -104,7 +104,7 @@ void print_process(Process* process) {
 }
 
 void print_time_since_entry(Process* process) {
-	printf("Time since entry: %lf\n", process->entry);
+	printf("Time since entry: %lf\n", process->finish_time);
 }
 
 void update_state(Process* process, const char* state) {
@@ -215,7 +215,7 @@ int main(int argc,char **argv)
 				else
 				{
 					waitpid(current_process->pid, NULL, 0);
-					current_process->entry = get_wtime() - start;
+					current_process->finish_time = get_wtime() - start;
 					update_state(current_process, "EXITED");
 					print_process(current_process);
 					print_time_since_entry(current_process);
@@ -229,7 +229,7 @@ int main(int argc,char **argv)
 			update_state(process_io, "RUNNING");
 			print_process(process_io);
 			waitpid(process_io->pid, NULL, 0);
-			process_io->entry = get_wtime() - start;
+			process_io->finish_time = get_wtime() - start;
 			update_state(process_io, "EXITED");
 			print_process(process_io);
 			print_time_since_entry(process_io);
