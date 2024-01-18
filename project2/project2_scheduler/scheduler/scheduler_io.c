@@ -148,6 +148,12 @@ int main(int argc,char **argv)
 		file = fopen(argv[2], "r");
 		printf("Policy: %s\n", policy);
 	}
+	else if ((argc == 3 || argc == 4) && strcmp(policy, "RR")==0)
+	{
+		printf("Round Robin is not available with processes that request IO\n");
+		exit(1);
+	}
+	
 	else
 	{
         printf("Usage: %s <policy> [<quantum>] <input_filename>\n", argv[0]);
