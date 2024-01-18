@@ -7,6 +7,7 @@ Filippos Minopetros, 1093431
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -16,12 +17,18 @@ typedef struct node {
     char* name;
 	pid_t pid;
 	char* state;
-	clock_t entry;
+	double entry;
     struct node* next;
     struct node* prev;
 }Process;
 
-void insert_end(Process** head, char* name, int pid, char* state, clock_t entry)
+double get_wtime(void) {
+  struct timeval t;
+  gettimeofday(&t, NULL);
+  return (double)t.tv_sec + (double)t.tv_usec * 1.0e-6;
+}
+
+void insert_end(Process** head, char* name, int pid, char* state)
 {
 	// create new node
 	Process* new_node = (Process *)malloc(sizeof(struct node));
@@ -32,7 +39,6 @@ void insert_end(Process** head, char* name, int pid, char* state, clock_t entry)
 	strcpy(new_node->name, name);
 	new_node->pid = pid;
 	strcpy(new_node->state, state);
-	new_node->entry = entry;
 
 	// new node will be the last one so next is null
 	new_node->next = NULL;
@@ -98,7 +104,7 @@ void print_process(Process* process) {
 }
 
 void print_time_since_entry(Process* process) {
-	printf("Time since entry: %ld\n", process->entry);
+	printf("Time since entry: %lf\n", process->entry);
 }
 
 void update_state(Process* process, const char* state) {
@@ -154,7 +160,7 @@ int main(int argc,char **argv)
 	
 	while (fscanf(file, "%s\n", name) != EOF)
 	{
-		insert_end(&list, name, -1, "NEW", time(NULL));
+		insert_end(&list, name, -1, "NEW");
 	}
 	
 	fclose(file);
@@ -172,7 +178,7 @@ int main(int argc,char **argv)
 		perror("could not set action for SIGUSR2\n");
 
 	// start of scheduler
-	time_t start = time(NULL);
+	double start = get_wtime();
 	Process* process_io;
 	while (list != NULL)
 	{
@@ -203,14 +209,13 @@ int main(int argc,char **argv)
 					process_io = current_process;
 					update_state(process_io, "WAITING IO");
 					print_process(process_io);
-					insert_end(&list, process_io->name, process_io->pid, "WAITING IO", process_io->entry);
+					insert_end(&list, process_io->name, process_io->pid, "WAITING IO");
 					continue;
 				}
 				else
 				{
 					waitpid(current_process->pid, NULL, 0);
-					time_t end = time(NULL);
-					current_process->entry = end - current_process->entry;
+					current_process->entry = get_wtime() - current_process->entry;
 					update_state(current_process, "EXITED");
 					print_process(current_process);
 					print_time_since_entry(current_process);
@@ -224,15 +229,14 @@ int main(int argc,char **argv)
 			update_state(process_io, "RUNNING");
 			print_process(process_io);
 			waitpid(process_io->pid, NULL, 0);
-			time_t end = time(NULL);
-			process_io->entry = end - process_io->entry;
+			process_io->entry = get_wtime() - process_io->entry;
 			update_state(process_io, "EXITED");
 			print_process(process_io);
 			print_time_since_entry(process_io);
 		}
 	}
-	time_t end = time(NULL);
-	printf("\nTotal time was %ld sec\n", end-start);
+	double end = get_wtime();
+	printf("\nTotal time was %lf sec\n", end-start);
 	free(list);
 
 	return 0;

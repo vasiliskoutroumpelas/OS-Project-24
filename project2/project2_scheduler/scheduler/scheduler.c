@@ -7,6 +7,7 @@ Filippos Minopetros, 1093431
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -17,12 +18,18 @@ typedef struct node {
     char* name;
 	pid_t pid;
 	char* state;
-	clock_t entry;
+	double entry;
     struct node* next;
     struct node* prev;
 }Process;
 
-void insert_end(Process** head, char* name, int pid, char* state, clock_t entry)
+double get_wtime(void) {
+  struct timeval t;
+  gettimeofday(&t, NULL);
+  return (double)t.tv_sec + (double)t.tv_usec * 1.0e-6;
+}
+
+void insert_end(Process** head, char* name, int pid, char* state)
 {
 	// create new node
 	Process* new_node = (Process *)malloc(sizeof(struct node));
@@ -33,7 +40,6 @@ void insert_end(Process** head, char* name, int pid, char* state, clock_t entry)
 	strcpy(new_node->name, name);
 	new_node->pid = pid;
 	strcpy(new_node->state, state);
-	new_node->entry = entry;
 
 	// new node will be the last one so next is null
 	new_node->next = NULL;
@@ -99,7 +105,7 @@ void print_process(Process* process) {
 }
 
 void print_time_since_entry(Process* process) {
-	printf("Time since entry: %ld\n", process->entry);
+	printf("Time since entry: %.2lf\n", process->entry);
 }
 
 void update_state(Process* process, const char* state) {
@@ -184,7 +190,7 @@ int main(int argc,char **argv)
 	char name[100];
 	while (fscanf(file, "%s\n", name) != EOF)
 	{
-		insert_end(&list, name, -1, "NEW", time(NULL));
+		insert_end(&list, name, -1, "NEW");
 	}
 	
 	fclose(file);
@@ -199,7 +205,7 @@ int main(int argc,char **argv)
 	
 
 	// start of scheduler
-	time_t start = time(NULL);
+	double start = get_wtime();
 	while (list != NULL)
 	{
 		current_process = pop_first(&list);
@@ -222,7 +228,7 @@ int main(int argc,char **argv)
 		if(child_finished)
 		{
 			update_state(current_process, "EXITED");
-			current_process->entry = time(NULL)-start;
+			current_process->entry = get_wtime()-start;
 			print_process(current_process);
 			print_time_since_entry(current_process);
 			child_finished = 0;
@@ -233,11 +239,11 @@ int main(int argc,char **argv)
 			update_state(current_process, "STOPPED");
 			print_process(current_process);
 			
-			insert_end(&list, current_process->name, current_process->pid, "STOPPED", current_process->entry);
+			insert_end(&list, current_process->name, current_process->pid, "STOPPED");
 		}
 	}
-	time_t end = time(NULL);
-	printf("\nTotal time was %ld sec\n", end-start);
+	double end = get_wtime();
+	printf("\nTotal time was %.2lf sec\n", end-start);
 	free(list);
 	return 0;
 }
