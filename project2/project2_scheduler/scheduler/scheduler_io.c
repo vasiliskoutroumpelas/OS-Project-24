@@ -22,6 +22,7 @@ typedef struct node {
     struct node* prev;
 }Process;
 
+// helper function to get current time (copied from project1)
 double get_wtime(void) {
   struct timeval t;
   gettimeofday(&t, NULL);
@@ -103,10 +104,12 @@ void print_process(Process* process) {
 			process->name, process->pid, process->state);
 }
 
+// display function, prints the finish timeof a process after exit
 void print_time_since_entry(Process* process) {
 	printf("Time since entry: %lf\n", process->finish_time);
 }
 
+// helper function, updates the state of a process
 void update_state(Process* process, const char* state) {
     strcpy(process->state, state);
 }
@@ -135,10 +138,11 @@ int main(int argc,char **argv)
         exit(1);
     }
 
-	// variables
+	// declaration of variables
 	char *policy = argv[1];
 	FILE* file; 
 
+	// initialisation of variables based on the execution arguements
 	if (argc == 3 && strcmp(policy, "FCFS")==0)
 	{
 		file = fopen(argv[2], "r");
@@ -155,7 +159,7 @@ int main(int argc,char **argv)
         return 1;
     }
 
-	// insert all processes from the file to the list
+	// insert all processes from the file to the queue
 	char name[100];
 	
 	while (fscanf(file, "%s\n", name) != EOF)
@@ -166,6 +170,7 @@ int main(int argc,char **argv)
 	fclose(file);
 	pid_t pid;
 
+	// defining actions
 	struct sigaction sact_io_start, sact_io_finish;
     sact_io_start.sa_handler = handle_io_start;
     sact_io_finish.sa_handler = handle_io_finish;
@@ -182,18 +187,17 @@ int main(int argc,char **argv)
 	Process* process_io;
 	while (list != NULL)
 	{
-		current_process = pop_first(&list);
-		if (list == NULL && strcmp(current_process->state, "WAITING IO")==0 && !io_finish)
+		current_process = pop_first(&list); // get processs that waits first in the queue
+		if (list == NULL && strcmp(current_process->state, "WAITING IO")==0 && !io_finish) // if there is no other process in queue and the process selected is waiting io, wait for io
 		{
 			printf("\nNo other process to be scheduled. Waiting IO to be finished.\n");
 			while (!io_finish);
 		}
-		if (!io_finish || current_process->pid!=process_io->pid)
+		if (!io_finish || current_process->pid!=process_io->pid) // start a process via forking and executing the child process if io has not finished, or if it has finished and the process that requested it is not yet selected
 		{
 			pid = fork();
 			if (pid == 0)
 			{
-				// printf("%s\n", current_process->name);
 				execl(current_process->name, current_process->name, NULL);
 				perror("execl fail");
 			}
@@ -203,7 +207,7 @@ int main(int argc,char **argv)
 				current_process->pid = pid;
 				print_process(current_process);
 				waitpid(current_process->pid, NULL, 0);
-				if (io_start)
+				if (io_start) // if process is requesting io stops it and puts it back in queue
 				{
 					io_start=0;
 					process_io = current_process;
@@ -212,7 +216,7 @@ int main(int argc,char **argv)
 					insert_end(&list, process_io->name, process_io->pid, "WAITING IO");
 					continue;
 				}
-				else
+				else // if process has not requested io, it is being executed normally until it finishes
 				{
 					waitpid(current_process->pid, NULL, 0);
 					current_process->finish_time = get_wtime() - start;
@@ -222,7 +226,7 @@ int main(int argc,char **argv)
 				}
 			}
 		}
-		else
+		else // if io has finished, continue the process that requested it until it finishes 
 		{
 			io_finish=0;
 			kill(process_io->pid, SIGCONT);

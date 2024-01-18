@@ -23,6 +23,7 @@ typedef struct node {
     struct node* prev;
 }Process;
 
+// helper function to get current time (copied from project1)
 double get_wtime(void) {
   struct timeval t;
   gettimeofday(&t, NULL);
@@ -104,10 +105,12 @@ void print_process(Process* process) {
 			process->name, process->pid, process->state);
 }
 
+// display function, prints the finish timeof a process after exit
 void print_time_since_entry(Process* process) {
 	printf("Time since entry: %.2lf\n", process->finish_time);
 }
 
+// helper function, updates the state of a process
 void update_state(Process* process, const char* state) {
     strcpy(process->state, state);
 }
@@ -121,6 +124,11 @@ void start_process(Process* process)
 		execl(process->name, process->name, NULL);
 		perror("execl fail");
 	}
+	else if(pid < 0)
+	{
+		perror("fork");
+		exit(1);
+	}
 	else // parent process
 	{
 		process->pid = pid;
@@ -132,7 +140,7 @@ Process *list, *current_process;
 
 // global variable which acts as a flag for the status of a process in execution
 int child_finished=0;
-void handle_child_finish(int sigid) {
+void handle_child_finish(int sigid) { // SIGCHLD
 	child_finished = 1;
 }
 
@@ -153,11 +161,12 @@ int main(int argc,char **argv)
         exit(1);
     }
 
-	// variables
+	// declaration of variables
 	char *policy = argv[1];
 	int quantum = 1000; 
 	FILE* file; 
-
+	
+	// initialisation of variables based on the execution arguements
 	if (argc == 4 && strcmp(policy, "RR")==0)
 	{
 		quantum = atoi(argv[2]);
@@ -186,7 +195,7 @@ int main(int argc,char **argv)
         return 1;
     }
 
-	// insert all processes from the file to the list
+	// insert all processes from the file to the queue
 	char name[100];
 	while (fscanf(file, "%s\n", name) != EOF)
 	{
@@ -208,24 +217,24 @@ int main(int argc,char **argv)
 	double start = get_wtime();
 	while (list != NULL)
 	{
-		current_process = pop_first(&list);
+		current_process = pop_first(&list); // get processs that waits first in the queue
 		
-		if (strcmp(current_process->state, "NEW")==0)
+		if (strcmp(current_process->state, "NEW")==0) // if not started, start
 		{
 			start_process(current_process);
 			update_state(current_process, "RUNNING");
 			print_process(current_process);
 		}
-		else
+		else // continue if process is stopped
 		{
 			kill(current_process->pid, SIGCONT);
 			update_state(current_process, "RUNNING");
 			print_process(current_process);
 		}
 		
-		sleep_milliseconds(quantum);
+		sleep_milliseconds(quantum); // wait for process to finish (FCFS) or wait process to be executed for seleted quantum
 		
-		if(child_finished)
+		if(child_finished) // if process finished update its state and print info
 		{
 			update_state(current_process, "EXITED");
 			current_process->finish_time = get_wtime()-start;
@@ -233,7 +242,7 @@ int main(int argc,char **argv)
 			print_time_since_entry(current_process);
 			child_finished = 0;
 		}
-		else
+		else // if process is not finished in selected quantum stops and is inserted back in queue
 		{
 			kill(current_process->pid, SIGSTOP);
 			update_state(current_process, "STOPPED");
