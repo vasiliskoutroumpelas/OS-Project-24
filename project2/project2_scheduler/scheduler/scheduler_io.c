@@ -106,12 +106,31 @@ void print_process(Process* process) {
 
 // display function, prints the finish timeof a process after exit
 void print_time_since_entry(Process* process) {
-	printf("Time since entry: %lf sec\n", process->finish_time);
+	printf("Time since entry: %.2lf sec\n", process->finish_time);
 }
 
 // helper function, updates the state of a process
 void update_state(Process* process, const char* state) {
     strcpy(process->state, state);
+}
+
+void start_process(Process* process) 
+{
+	pid_t pid = fork();
+	if (pid == 0) // child process
+	{
+		execl(process->name, process->name, NULL);
+		perror("execl fail");
+	}
+	else if(pid < 0)
+	{
+		perror("fork");
+		exit(1);
+	}
+	else // parent process
+	{
+		process->pid = pid;
+	}
 }
 
 // global variables which act as flags for the status of an IO execution
@@ -174,7 +193,6 @@ int main(int argc,char **argv)
 	}
 	
 	fclose(file);
-	pid_t pid;
 
 	// defining actions
 	struct sigaction sact_io_start, sact_io_finish;
@@ -199,42 +217,30 @@ int main(int argc,char **argv)
 			printf("\nNo other process to be scheduled. Waiting IO to be finished.\n");
 			while (!io_finish);
 		}
-		if (!io_finish || current_process->pid!=process_io->pid) // start a process via forking and executing the child process if io has not finished, or if it has finished and the process that requested it is not yet selected
+		if (!io_finish || current_process->pid!=process_io->pid) // if io has not finished, or if it has finished and the process that requested it is not yet selected
 		{
-			pid = fork();
-			if (pid == 0)
+			start_process(current_process);
+			update_state(current_process, "RUNNING");
+			print_process(current_process);
+			waitpid(current_process->pid, NULL, 0);
+			if (io_start) // if process is requesting io stops it and puts it back in queue
 			{
-				execl(current_process->name, current_process->name, NULL);
-				perror("execl fail");
+				process_io = current_process;
+				update_state(process_io, "WAITING IO");
+				print_process(process_io);
+				insert_end(&list, process_io->name, process_io->pid, "WAITING IO");
+				io_start=0;
+				continue;
 			}
-			else
-			{
-				update_state(current_process, "RUNNING");
-				current_process->pid = pid;
-				print_process(current_process);
-				waitpid(current_process->pid, NULL, 0);
-				if (io_start) // if process is requesting io stops it and puts it back in queue
-				{
-					io_start=0;
-					process_io = current_process;
-					update_state(process_io, "WAITING IO");
-					print_process(process_io);
-					insert_end(&list, process_io->name, process_io->pid, "WAITING IO");
-					continue;
-				}
-				else // if process has not requested io, it is being executed normally until it finishes
-				{
-					waitpid(current_process->pid, NULL, 0);
-					current_process->finish_time = get_wtime() - start;
-					update_state(current_process, "EXITED");
-					print_process(current_process);
-					print_time_since_entry(current_process);
-				}
-			}
+			// if process has not requested io, it is being executed normally until it finishes
+			waitpid(current_process->pid, NULL, 0);
+			current_process->finish_time = get_wtime() - start;
+			update_state(current_process, "EXITED");
+			print_process(current_process);
+			print_time_since_entry(current_process);
 		}
 		else // if io has finished, continue the process that requested it until it finishes 
 		{
-			io_finish=0;
 			kill(process_io->pid, SIGCONT);
 			update_state(process_io, "RUNNING");
 			print_process(process_io);
@@ -243,10 +249,11 @@ int main(int argc,char **argv)
 			update_state(process_io, "EXITED");
 			print_process(process_io);
 			print_time_since_entry(process_io);
+			io_finish=0;
 		}
 	}
 	double end = get_wtime();
-	printf("\nTotal time was %lf sec\n", end-start);
+	printf("\nTotal time was %.2lf sec\n", end-start);
 	free(list);
 
 	return 0;
