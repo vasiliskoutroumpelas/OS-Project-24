@@ -106,7 +106,7 @@ void print_process(Process* process) {
 
 // display function, prints the finish timeof a process after exit
 void print_time_since_entry(Process* process) {
-	printf("Time since entry: %lf\n", process->finish_time);
+	printf("Time since entry: %lf sec\n", process->finish_time);
 }
 
 // helper function, updates the state of a process

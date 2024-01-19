@@ -107,7 +107,7 @@ void print_process(Process* process) {
 
 // display function, prints the finish timeof a process after exit
 void print_time_since_entry(Process* process) {
-	printf("Time since entry: %.2lf\n", process->finish_time);
+	printf("Time since entry: %.2lf sec\n", process->finish_time);
 }
 
 // helper function, updates the state of a process
@@ -171,7 +171,7 @@ int main(int argc,char **argv)
 	{
 		quantum = atoi(argv[2]);
 		file = fopen(argv[3], "r");
-		printf("Policy: %s\nQuantum: %d\n", policy, quantum);
+		printf("Policy: %s\nQuantum: %d msec\n", policy, quantum);
 	}
 	else if (argc == 3 && strcmp(policy, "RR")==0)
 	{
